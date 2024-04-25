@@ -177,10 +177,11 @@
         "overProvision": "false",
         "vmssApiVersion": "2017-03-30",
         "sfrpApiVersion": "2017-07-01-preview",
-        "lbApiVersion": "2015-06-15",
-        "vNetApiVersion": "2015-06-15",
+        "lbApiVersion": "2017-08-01",
+        "vNetApiVersion": "2017-08-01",
         "storageApiVersion": "2016-01-01",
-        "publicIPApiVersion": "2015-06-15",
+        "publicIPApiVersion": "2017-08-01",
+        "nsgApiVersion": "2021-03-01",
         "nt0applicationStartPort": "20000",
         "nt0applicationEndPort": "30000",
         "nt0ephemeralStartPort": "49152",
@@ -232,7 +233,10 @@
                 "subnets": [{
                     "name": "[variables('subnet0Name')]",
                     "properties": {
-                        "addressPrefix": "[variables('subnet0Prefix')]"
+                        "addressPrefix": "[variables('subnet0Prefix')]",
+                        "networkSecurityGroup": {
+                            "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat('nsg', variables('subnet0Name')))]"
+                        }
                     }
                 }]
             },
@@ -242,10 +246,123 @@
             }
         },
         {
+            "apiVersion": "2018-08-01",
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "name": "[concat('nsg', variables('subnet0Name'))]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+              "securityRules": [
+                {
+                  "name": "AzurePortal",
+                  "properties": {
+                    "access": "Allow",
+                    "sourceAddressPrefix": "ServiceFabric",
+                    "sourcePortRange": "*",
+                    "sourcePortRanges": [],
+                    "destinationAddressPrefix": "*",
+                    "destinationPortRange": "19080",
+                    "destinationPortRanges": [],
+                    "direction": "Inbound",
+                    "priority": 3900,
+                    "protocol": "Tcp",
+                    "description": ""
+                  }
+                },
+                {
+                    "name": "Cluster",
+                    "properties": {
+                      "access": "Allow",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "sourcePortRanges": [],
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "",
+                      "destinationPortRanges": [ "1025", "1026", "1027" ],
+                      "direction": "Inbound",
+                      "priority": 3930,
+                      "protocol": "Tcp",
+                      "description": ""
+                    }
+                },
+                {
+                    "name": "Ephemeral",
+                    "properties": {
+                      "access": "Allow",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "sourcePortRanges": [],
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "",
+                      "destinationPortRanges": [ "49152", "65334" ],
+                      "direction": "Inbound",
+                      "priority": 3940,
+                      "protocol": "Tcp",
+                      "description": ""
+                    }
+                },
+                {
+                    "name": "Application",
+                    "properties": {
+                      "access": "Allow",
+                      "sourceAddressPrefix": "VirtualNetwork",
+                      "sourcePortRange": "*",
+                      "sourcePortRanges": [],
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "",
+                      "destinationPortRanges": [ "20000", "30000" ],
+                      "direction": "Inbound",
+                      "priority": 3950,
+                      "protocol": "Tcp",
+                      "description": ""
+                    }
+                },
+                {
+                  "name": "ResourceProvider",
+                  "properties": {
+                    "access": "Allow",
+                    "sourceAddressPrefix": "*",
+                    "sourcePortRange": "*",
+                    "sourcePortRanges": [],
+                    "destinationAddressPrefix": "ServiceFabric",
+                    "destinationPortRange": "443",
+                    "destinationPortRanges": [],
+                    "direction": "Outbound",
+                    "priority": 4010,
+                    "protocol": "Tcp",
+                    "description": ""
+                  }
+                },
+                {
+                  "name": "DownloadBinaries",
+                  "properties": {
+                    "access": "Allow",
+                    "sourceAddressPrefix": "*",
+                    "sourcePortRange": "*",
+                    "sourcePortRanges": [],
+                    "destinationAddressPrefix": "AzureFrontDoor.FirstParty",
+                    "destinationPortRange": "",
+                    "destinationPortRanges": [ "443" ],
+                    "direction": "Outbound",
+                    "priority": 4020,
+                    "protocol": "Tcp",
+                    "description": ""
+                  }
+                }
+              ]
+            },
+            "tags": {
+              "resourceType": "Service Fabric",
+              "clusterName": "[parameters('clusterName')]"
+            }
+        },
+        {
             "apiVersion": "[variables('publicIPApiVersion')]",
             "type": "Microsoft.Network/publicIPAddresses",
             "name": "[concat(variables('lbIPName'),'-',variables('vmNodeType0Name'))]",
             "location": "[variables('computeLocation')]",
+            "sku": {
+                "name": "Standard"
+            },
             "properties": {
                 "dnsSettings": {
                     "domainNameLabel": "[variables('dnsName')]"
@@ -265,6 +382,9 @@
             "dependsOn": [
                 "[concat('Microsoft.Network/publicIPAddresses/',concat(variables('lbIPName'),'-',variables('vmNodeType0Name')))]"
             ],
+            "sku": {
+                "name": "Standard"
+            },
             "properties": {
                 "frontendIPConfigurations": [{
                     "name": "LoadBalancerIPConfig",
